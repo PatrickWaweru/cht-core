@@ -1533,7 +1533,7 @@ describe('Enketo service', () => {
 
   describe('renderContactForm', () => {
     beforeEach(() => {
-      service.setFormTitle = sinon.stub();
+      service.enketoUtils.setFormTitle = sinon.stub();
       dbGetAttachment.resolves('<form/>');
       translateService.get.callsFake((key) => `translated key ${key}`);
       TranslateFrom.callsFake((sentence) => `translated sentence ${sentence}`);
@@ -1562,8 +1562,8 @@ describe('Enketo service', () => {
         titleKey: 'contact.type.health_center.new',
       });
 
-      expect(service.setFormTitle.callCount).to.be.equal(1);
-      expect(service.setFormTitle.args[0][1]).to.be.equal('translated key contact.type.health_center.new');
+      expect(service.enketoUtils.setFormTitle.callCount).to.be.equal(1);
+      expect(service.enketoUtils.setFormTitle.args[0][1]).to.be.equal('translated key contact.type.health_center.new');
     });
 
     it('should fallback to translate document title when the titleKey is not available', async () => {
@@ -1575,8 +1575,8 @@ describe('Enketo service', () => {
         valuechangeListener: callbackMock,
       });
 
-      expect(service.setFormTitle.callCount).to.be.equal(1);
-      expect(service.setFormTitle.args[0][1]).to.be.equal('translated sentence New Area');
+      expect(service.enketoUtils.setFormTitle.callCount).to.be.equal(1);
+      expect(service.enketoUtils.setFormTitle.args[0][1]).to.be.equal('translated sentence New Area');
     });
   });
 });
