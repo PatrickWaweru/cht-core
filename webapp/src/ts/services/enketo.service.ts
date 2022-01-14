@@ -53,7 +53,6 @@ export class EnketoService {
     private ngZone:NgZone,
   ) {
     this.enketoUtils = new EnketoUtils(
-      store,
       addAttachmentService,
       contactSummaryService,
       dbService,
@@ -75,12 +74,14 @@ export class EnketoService {
       window,
       ngZone,
       Xpath,
+      this.objUrls
     );
-    this.enketoUtils.inited = this.init();
+    this.inited = this.init();
   }
 
   private enketoUtils;
   private readonly objUrls = [];
+  private inited:Promise<undefined>;
 
   private currentForm;
   getCurrentForm() {
@@ -99,8 +100,10 @@ export class EnketoService {
   }
 
   render(selector, form, instanceData, editedListener, valuechangeListener) {
-    return this.ngZone.runOutsideAngular(() => {
-      return this.enketoUtils._render(selector, form, instanceData, editedListener, valuechangeListener);
+    return this.inited.then(() => {
+      return this.ngZone.runOutsideAngular(() => {
+        return this.enketoUtils._render(selector, form, instanceData, editedListener, valuechangeListener);
+      });
     });
   }
 

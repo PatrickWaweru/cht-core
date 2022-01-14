@@ -1,9 +1,11 @@
 const uuid = require('uuid').v4;
 const pojo2xml = require('pojo2xml');
 
+const HTML_ATTACHMENT_NAME = 'form.html';
+const MODEL_ATTACHMENT_NAME = 'model.xml';
+
 module.exports = class EnketoUtils {
   constructor(
-    store,
     addAttachmentService,
     contactSummaryService,
     dbService,
@@ -24,9 +26,9 @@ module.exports = class EnketoUtils {
     servicesActions,
     window,
     zoneRunner,
-    Xpath
+    Xpath,
+    objUrls
   ) {
-    this.store = store;
     this.addAttachmentService = addAttachmentService;
     this.contactSummaryService = contactSummaryService;
     this.dbService = dbService;
@@ -48,36 +50,26 @@ module.exports = class EnketoUtils {
     this.window = window;
     this.zoneRunner = zoneRunner;
     this.Xpath = Xpath;
-
-    this.HTML_ATTACHMENT_NAME = 'form.html';
-    this.MODEL_ATTACHMENT_NAME = 'model.xml';
-    this.objUrls = [];
-
-    this.inited = false;
+    this.objUrls = objUrls;
   }
 
   // Public methods
   _render(selector, form, instanceData, editedListener, valuechangeListener) {
-    return Promise
-      .all([
-        this.inited,
-        this.getUserContact(),
-      ])
-      .then(() => {
-        const formContext = {
-          selector,
-          formDoc: form,
-          instanceData,
-          editedListener,
-          valuechangeListener,
-        };
-        return this.renderForm(formContext);
-      });
+    return this.getUserContact().then(() => {
+      const formContext = {
+        selector,
+        formDoc: form,
+        instanceData,
+        editedListener,
+        valuechangeListener,
+      };
+      return this.renderForm(formContext);
+    });
   }
 
   _save(formInternalId, form, geoHandle, docId) {
     const getDocPromise = docId ? this.update(docId) : this.create(formInternalId);
-  
+
     return Promise
       .all([
         getDocPromise,
@@ -120,8 +112,8 @@ module.exports = class EnketoUtils {
   transformXml(form) {
     return Promise
       .all([
-        this.getAttachment(form._id, this.HTML_ATTACHMENT_NAME),
-        this.getAttachment(form._id, this.MODEL_ATTACHMENT_NAME)
+        this.getAttachment(form._id, HTML_ATTACHMENT_NAME),
+        this.getAttachment(form._id, MODEL_ATTACHMENT_NAME)
       ])
       .then(([html, model]) => {
         const $html =   $(html);
