@@ -5,7 +5,14 @@ import * as moment from 'moment';
 
 import { Xpath } from '@mm-providers/xpath-element-path.provider';
 import * as medicXpathExtensions from '../../js/enketo/medic-xpath-extensions';
-import EnketoUtils from '../../js/enketo-utils';
+import {
+  ContactServices,
+  FileServices,
+  FormDataServices,
+  TranslationServices,
+  XmlServices,
+  EnketoFormManager
+} from '../../js/enketo-utils';
 import { AddAttachmentService } from '@mm-services/add-attachment.service';
 import { DbService } from '@mm-services/db.service';
 import { EnketoPrepopulationDataService } from '@mm-services/enketo-prepopulation-data.service';
@@ -31,6 +38,7 @@ import { TransitionsService } from '@mm-services/transitions.service';
 })
 export class EnketoService {
   constructor(
+    // TODO Probs dont need to keep these as instance variables
     private store:Store,
     private addAttachmentService:AddAttachmentService,
     private contactSummaryService:ContactSummaryService,
@@ -52,40 +60,38 @@ export class EnketoService {
     private translateService:TranslateService,
     private ngZone:NgZone,
   ) {
-    this.enketoUtils = new EnketoUtils(
-      addAttachmentService,
-      contactSummaryService,
-      dbService,
-      enketoPrepopulationDataService,
-      enketoTranslationService,
-      extractLineageService,
-      fileReaderService,
-      getReportContentService,
-      languageService,
-      lineageModelGeneratorService,
-      searchService,
+    this.enketoFormMgr = new EnketoFormManager(
+      new ContactServices(extractLineageService, userContactService),
+      new FileServices(dbService, fileReaderService),
+      new FormDataServices(
+        contactSummaryService,
+        enketoPrepopulationDataService,
+        languageService,
+        lineageModelGeneratorService,
+        searchService
+      ),
+      new TranslationServices(translateService, translateFromService),
+      new XmlServices(
+        addAttachmentService,
+        enketoTranslationService,
+        getReportContentService,
+        xmlFormsService,
+      ),
       submitFormBySmsService,
-      translateFromService,
-      userContactService,
-      xmlFormsService,
       transitionsService,
-      translateService,
       new ServicesActions(this.store),
       window,
       ngZone,
-      Xpath,
-      this.objUrls
+      Xpath
     );
     this.inited = this.init();
   }
 
-  private enketoUtils;
-  private readonly objUrls = [];
+  private enketoFormMgr;
   private inited:Promise<undefined>;
 
-  private currentForm;
   getCurrentForm() {
-    return this.currentForm;
+    return this.enketoFormMgr.getCurrentForm();
   }
 
   private init() {
@@ -102,13 +108,13 @@ export class EnketoService {
   render(selector, form, instanceData, editedListener, valuechangeListener) {
     return this.inited.then(() => {
       return this.ngZone.runOutsideAngular(() => {
-        return this.enketoUtils._render(selector, form, instanceData, editedListener, valuechangeListener);
+        return this.enketoFormMgr._render(selector, form, instanceData, editedListener, valuechangeListener);
       });
     });
   }
 
   renderContactForm(formContext: EnketoFormContext) {
-    return this.enketoUtils.renderForm(formContext);
+    return this.enketoFormMgr.renderForm(formContext);
   }
 
   save(formInternalId, form, geoHandle, docId?) {
@@ -121,23 +127,12 @@ export class EnketoService {
 
         $('form.or').trigger('beforesave');
 
-        return this.ngZone.runOutsideAngular(() => this.enketoUtils._save(formInternalId, form, geoHandle, docId));
+        return this.ngZone.runOutsideAngular(() => this.enketoFormMgr._save(formInternalId, form, geoHandle, docId));
       });
   }
 
   unload(form) {
-    $(window).off('.enketo-pagemode');
-    if (form) {
-      form.resetView();
-    }
-    // unload blobs
-    this.objUrls.forEach((url) => {
-      (window.URL || window.webkitURL).revokeObjectURL(url);
-    });
-
-    delete window.CHTCore.debugFormModel;
-    delete this.currentForm;
-    this.objUrls.length = 0;
+    this.enketoFormMgr.unload(form);
   }
 }
 
