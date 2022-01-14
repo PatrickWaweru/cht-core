@@ -124,7 +124,7 @@ const getContactSummary = (formDataServices, doc, instanceData) => {
     });
 };
 
-const getEnketoForm = (window, formDataServices, wrapper, doc, instanceData) => {
+const getEnketoForm = (formDataServices, wrapper, doc, instanceData) => {
   return Promise
     .all([
       formDataServices.enketoPrepopulationData.get(doc.model, instanceData),
@@ -169,58 +169,56 @@ const setFormTitle = (wrapper, title) => {
   } // else the title is hardcoded in the form definition - leave it alone
 };
 
-function handleKeypressOnInputField(window) {
-  return (e) => {
-    // Here we capture both CR and TAB characters, and handle field-skipping
-    if(!window.medicmobile_android || (e.keyCode !== 9 && e.keyCode !== 13)) {
+function handleKeypressOnInputField(e) {
+  // Here we capture both CR and TAB characters, and handle field-skipping
+  if(!window.medicmobile_android || (e.keyCode !== 9 && e.keyCode !== 13)) {
+    return;
+  }
+
+  const $input = $(this);
+
+  // stop the keypress from being handled elsewhere
+  e.preventDefault();
+
+  const $thisQuestion = $input.closest('.question');
+
+  // If there's another question on the current page, focus on that
+  if($thisQuestion.attr('role') !== 'page') {
+    const $nextQuestion = $thisQuestion.find(
+      '~ .question:not(.disabled):not(.or-appearance-hidden), ~ .repeat-buttons button.repeat:not(:disabled)'
+    );
+    if($nextQuestion.length) {
+      if($nextQuestion[0].tagName !== 'LABEL') {
+        // The next question is something complicated, so we can't just
+        // focus on it.  Next best thing is to blur the current selection
+        // so the on-screen keyboard closes.
+        $input.trigger('blur');
+      } else {
+        // Delay focussing on the next field, so that keybaord close and
+        // open events both register.  This should mean that the on-screen
+        // keyboard is maintained between fields.
+        setTimeout(() => {
+          $nextQuestion.first().trigger('focus');
+        }, 10);
+      }
       return;
     }
+  }
 
-    const $input = $(this);
+  // Trigger the change listener on the current field to update the enketo
+  // model
+  $input.trigger('change');
 
-    // stop the keypress from being handled elsewhere
-    e.preventDefault();
+  const enketoContainer = $thisQuestion.closest('.enketo');
 
-    const $thisQuestion = $input.closest('.question');
-
-    // If there's another question on the current page, focus on that
-    if($thisQuestion.attr('role') !== 'page') {
-      const $nextQuestion = $thisQuestion.find(
-        '~ .question:not(.disabled):not(.or-appearance-hidden), ~ .repeat-buttons button.repeat:not(:disabled)'
-      );
-      if($nextQuestion.length) {
-        if($nextQuestion[0].tagName !== 'LABEL') {
-          // The next question is something complicated, so we can't just
-          // focus on it.  Next best thing is to blur the current selection
-          // so the on-screen keyboard closes.
-          $input.trigger('blur');
-        } else {
-          // Delay focussing on the next field, so that keybaord close and
-          // open events both register.  This should mean that the on-screen
-          // keyboard is maintained between fields.
-          setTimeout(() => {
-            $nextQuestion.first().trigger('focus');
-          }, 10);
-        }
-        return;
-      }
-    }
-
-    // Trigger the change listener on the current field to update the enketo
-    // model
-    $input.trigger('change');
-
-    const enketoContainer = $thisQuestion.closest('.enketo');
-
-    // If there's no question on the current page, try to go to change page,
-    // or submit the form.
-    const next = enketoContainer.find('.btn.next-page:enabled:not(.disabled)');
-    if(next.length) {
-      next.trigger('click');
-    } else {
-      enketoContainer.find('.btn.submit').trigger('click');
-    }
-  };
+  // If there's no question on the current page, try to go to change page,
+  // or submit the form.
+  const next = enketoContainer.find('.btn.next-page:enabled:not(.disabled)');
+  if(next.length) {
+    next.trigger('click');
+  } else {
+    enketoContainer.find('.btn.submit').trigger('click');
+  }
 }
 
 const setupNavButtons = (currentForm, $wrapper, currentIndex) => {
@@ -250,7 +248,7 @@ const forceRecalculate = (form) => {
   form.output.update();
 };
 
-const overrideNavigationButtons = (window, form, $wrapper) => {
+const overrideNavigationButtons = (form, $wrapper) => {
   $wrapper
     .find('.btn.next-page')
     .off('.pagemode')
@@ -280,7 +278,7 @@ const overrideNavigationButtons = (window, form, $wrapper) => {
     });
 };
 
-const addPopStateHandler = (window, form, $wrapper) => {
+const addPopStateHandler = (form, $wrapper) => {
   $(window).on('popstate.enketo-pagemode', (event) => {
     if(event.originalEvent &&
       event.originalEvent.state &&
@@ -299,14 +297,14 @@ const addPopStateHandler = (window, form, $wrapper) => {
   });
 };
 
-const renderFromXmls = (window, currentForm, formDataServices, translationServices, xmlFormContext) => {
+const renderFromXmls = (currentForm, formDataServices, translationServices, xmlFormContext) => {
   const { doc, instanceData, titleKey, wrapper } = xmlFormContext;
 
   const formContainer = wrapper.find('.container').first();
   formContainer.html(doc.html.get(0));
 
   return Promise.all([
-    getEnketoForm(window, formDataServices, wrapper, doc, instanceData).then((form) => {
+    getEnketoForm(formDataServices, wrapper, doc, instanceData).then((form) => {
       const loadErrors = form.init();
       if(loadErrors && loadErrors.length) {
         return Promise.reject(new Error(JSON.stringify(loadErrors)));
@@ -318,28 +316,16 @@ const renderFromXmls = (window, currentForm, formDataServices, translationServic
     setFormTitle(wrapper, title);
     wrapper.show();
 
-    wrapper.find('input').on('keydown', handleKeypressOnInputField(window));
+    wrapper.find('input').on('keydown', handleKeypressOnInputField);
 
     // handle page turning using browser history
     window.history.replaceState({ enketo_page_number: 0 }, '');
-    overrideNavigationButtons(window, form, wrapper);
-    addPopStateHandler(window, form, wrapper);
+    overrideNavigationButtons(form, wrapper);
+    addPopStateHandler(form, wrapper);
     forceRecalculate(form);
     setupNavButtons(form, wrapper, 0);
     return form;
   });
-};
-
-const registerEditedListener = (zoneRunner, $selector, listener) => {
-  if(listener) {
-    $selector.on('edited', () => zoneRunner.run(() => listener()));
-  }
-};
-
-const registerValuechangeListener = (zoneRunner, $selector, listener) => {
-  if(listener) {
-    $selector.on('xforms-value-changed', () => zoneRunner.run(() => listener()));
-  }
 };
 
 const update = (dbService, docId) => {
@@ -368,7 +354,7 @@ const create = (contactServices, formInternalId) => {
   });
 };
 
-const xmlToDocs = (window, Xpath, xmlServices, doc, formXml, record) => {
+const xmlToDocs = (Xpath, xmlServices, doc, formXml, record) => {
   const recordDoc = $.parseXML(record);
   const $record = $($(recordDoc).children()[0]);
   const repeatPaths = xmlServices.enketoTranslation.getRepeatPaths(formXml);
@@ -659,11 +645,7 @@ class EnketoFormManager {
     formDataServices,
     translationServices,
     xmlServices,
-    submitFormBySmsService,
     transitionsService,
-    servicesActions,
-    window,
-    zoneRunner,
     Xpath
   ) {
     this.contactServices = contactServices;
@@ -671,11 +653,7 @@ class EnketoFormManager {
     this.formDataServices = formDataServices;
     this.translationServices = translationServices;
     this.xmlServices = xmlServices;
-    this.submitFormBySmsService = submitFormBySmsService;
     this.transitionsService = transitionsService;
-    this.servicesActions = servicesActions;
-    this.window = window;
-    this.zoneRunner = zoneRunner;
     this.Xpath = Xpath;
 
     this.currentForm = null;
@@ -686,14 +664,12 @@ class EnketoFormManager {
     return this.currentForm;
   }
 
-  _render(selector, form, instanceData, editedListener, valuechangeListener) {
+  _render(selector, form, instanceData) {
     return getUserContact(this.contactServices.userContact).then(() => {
       const formContext = {
         selector,
         formDoc: form,
         instanceData,
-        editedListener,
-        valuechangeListener,
       };
 
       this.currentForm = this.renderForm(formContext);
@@ -711,7 +687,6 @@ class EnketoFormManager {
         getFormXml(this.fileServices, this.xmlServices.xmlForms, formInternalId),
       ])
       .then(([doc, formXml]) => xmlToDocs(
-        this.window,
         this.Xpath,
         this.xmlServices,
         doc,
@@ -720,38 +695,30 @@ class EnketoFormManager {
       ))
       .then((docs) => saveGeo(geoHandle, docs))
       .then((docs) => this.transitionsService.applyTransitions(docs))
-      .then((docs) => saveDocs(this.fileServices.db, docs))
-      .then((docs) => {
-        this.servicesActions.setLastChangedDoc(docs[0]);
-        // submit by sms _after_ saveDocs so that the main doc's ID is available
-        this.submitFormBySmsService.submit(docs[0]);
-        return docs;
-      });
+      .then((docs) => saveDocs(this.fileServices.db, docs));
   }
 
   unload(form) {
-    $(this.window).off('.enketo-pagemode');
+    $(window).off('.enketo-pagemode');
     if(form) {
       form.resetView();
     }
     // unload blobs
     this.objUrls.forEach((url) => {
-      (this.window.URL || this.window.webkitURL).revokeObjectURL(url);
+      (window.URL || window.webkitURL).revokeObjectURL(url);
     });
 
-    delete this.window.CHTCore.debugFormModel;
+    delete window.CHTCore.debugFormModel;
     delete this.currentForm;
     this.objUrls.length = 0;
   }
 
   renderForm(formContext) {
     const {
-      editedListener,
       formDoc,
       instanceData,
       selector,
       titleKey,
-      valuechangeListener,
     } = formContext;
 
     const $selector = $(selector);
@@ -763,7 +730,7 @@ class EnketoFormManager {
         instanceData,
         titleKey,
       };
-      return renderFromXmls(window, this.currentForm, this.formDataServices, this.translationServices, xmlFormContext);
+      return renderFromXmls(this.currentForm, this.formDataServices, this.translationServices, xmlFormContext);
     }).then((form) => {
       const formContainer = $selector.find('.container').first();
       const replaceMediaLoaders = (formContainer, formDoc) => {
@@ -774,7 +741,7 @@ class EnketoFormManager {
             .get()
             .getAttachment(formDoc._id, src)
             .then((blob) => {
-              const objUrl = (this.window.URL || this.window.webkitURL).createObjectURL(blob);
+              const objUrl = (window.URL || window.webkitURL).createObjectURL(blob);
               this.objUrls.push(objUrl);
               elem
                 .attr('src', objUrl)
@@ -797,14 +764,13 @@ class EnketoFormManager {
         });
       });
 
-      registerEditedListener(this.zoneRunner, $selector, editedListener);
-      registerValuechangeListener(this.zoneRunner, $selector, valuechangeListener);
-      registerValuechangeListener(this.zoneRunner, $selector,
-        () => setupNavButtons(this.currentForm, $selector, form.pages._getCurrentIndex()));
-
-      this.window.CHTCore.debugFormModel = () => form.model.getStr();
+      window.CHTCore.debugFormModel = () => form.model.getStr();
       return form;
     });
+  }
+
+  setupNavButtons(currentForm, $wrapper, currentIndex) {
+    setupNavButtons(currentForm, $wrapper, currentIndex);
   }
 }
 

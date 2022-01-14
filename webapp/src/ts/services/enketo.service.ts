@@ -38,26 +38,25 @@ import { TransitionsService } from '@mm-services/transitions.service';
 })
 export class EnketoService {
   constructor(
-    // TODO Probs dont need to keep these as instance variables
-    private store:Store,
-    private addAttachmentService:AddAttachmentService,
-    private contactSummaryService:ContactSummaryService,
-    private dbService:DbService,
-    private enketoPrepopulationDataService:EnketoPrepopulationDataService,
-    private enketoTranslationService:EnketoTranslationService,
-    private extractLineageService:ExtractLineageService,
-    private fileReaderService:FileReaderService,
-    private getReportContentService:GetReportContentService,
-    private languageService:LanguageService,
-    private lineageModelGeneratorService:LineageModelGeneratorService,
-    private searchService:SearchService,
+    store:Store,
+    addAttachmentService:AddAttachmentService,
+    contactSummaryService:ContactSummaryService,
+    dbService:DbService,
+    enketoPrepopulationDataService:EnketoPrepopulationDataService,
+    enketoTranslationService:EnketoTranslationService,
+    extractLineageService:ExtractLineageService,
+    fileReaderService:FileReaderService,
+    getReportContentService:GetReportContentService,
+    languageService:LanguageService,
+    lineageModelGeneratorService:LineageModelGeneratorService,
+    searchService:SearchService,
     private submitFormBySmsService:SubmitFormBySmsService,
-    private translateFromService:TranslateFromService,
-    private userContactService:UserContactService,
-    private xmlFormsService:XmlFormsService,
+    translateFromService:TranslateFromService,
+    userContactService:UserContactService,
+    xmlFormsService:XmlFormsService,
     private zScoreService:ZScoreService,
-    private transitionsService:TransitionsService,
-    private translateService:TranslateService,
+    transitionsService:TransitionsService,
+    translateService:TranslateService,
     private ngZone:NgZone,
   ) {
     this.enketoFormMgr = new EnketoFormManager(
@@ -77,16 +76,15 @@ export class EnketoService {
         getReportContentService,
         xmlFormsService,
       ),
-      submitFormBySmsService,
       transitionsService,
-      new ServicesActions(this.store),
-      window,
-      ngZone,
       Xpath
     );
+
     this.inited = this.init();
+    this.servicesActions = new ServicesActions(store);
   }
 
+  private servicesActions;
   private enketoFormMgr;
   private inited:Promise<undefined>;
 
@@ -105,16 +103,38 @@ export class EnketoService {
       });
   }
 
+  private registerListeners($selector, form, editedListener, valueChangeListener) {
+    if(editedListener) {
+      $selector.on('edited', () => this.ngZone.run(() => editedListener()));
+    }
+    [
+      valueChangeListener,
+      () => this.enketoFormMgr.setupNavButtons(form, $selector, form.pages._getCurrentIndex())
+    ].forEach(listener => {
+      if(listener) {
+        $selector.on('xforms-value-changed', () => this.ngZone.run(() => listener()));
+      }
+    });
+    return form;
+  }
+
   render(selector, form, instanceData, editedListener, valuechangeListener) {
     return this.inited.then(() => {
       return this.ngZone.runOutsideAngular(() => {
-        return this.enketoFormMgr._render(selector, form, instanceData, editedListener, valuechangeListener);
+        return this.enketoFormMgr._render(selector, form, instanceData)
+          .then(form => this.registerListeners(selector, form, editedListener, valuechangeListener));
       });
     });
   }
 
   renderContactForm(formContext: EnketoFormContext) {
-    return this.enketoFormMgr.renderForm(formContext);
+    return this.enketoFormMgr.renderForm(formContext)
+      .then(form => this.registerListeners(
+        formContext.selector,
+        form,
+        formContext.editedListener,
+        formContext.valuechangeListener
+      ));
   }
 
   save(formInternalId, form, geoHandle, docId?) {
@@ -127,7 +147,15 @@ export class EnketoService {
 
         $('form.or').trigger('beforesave');
 
-        return this.ngZone.runOutsideAngular(() => this.enketoFormMgr._save(formInternalId, form, geoHandle, docId));
+        return this.ngZone.runOutsideAngular(() => {
+          return this.enketoFormMgr._save(formInternalId, form, geoHandle, docId)
+            .then((docs) => {
+              this.servicesActions.setLastChangedDoc(docs[0]);
+              // submit by sms _after_ saveDocs so that the main doc's ID is available
+              this.submitFormBySmsService.submit(docs[0]);
+              return docs;
+            });
+        });
       });
   }
 
