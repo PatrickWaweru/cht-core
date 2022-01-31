@@ -545,6 +545,16 @@ const createUserEntities = async (user, appUrl) => {
   return response;
 };
 
+const validateUserEntities = async (user, response) => {
+  await validateNewUsername(user.username);
+  // await validatePlace(user);
+  // await validateContactParent(user);
+  // await validateContact(user, response);
+  // await validateUser(user, response);
+  // await validateUserSettings(user, response);
+  // await validateTokenLogin(user, response);
+};
+
 const validateUserFields = (users) => {
   const missingFieldsFailingIndexes = [];
   const tokenLoginFailingIndexes = [];
@@ -668,6 +678,36 @@ module.exports = {
 
     // create all valid users even if some are failing
     const promises = await allPromisesSettled(users.map(async (user) => await createUserEntities(user, appUrl)));
+    return promises.map((promise) => promise.status === 'rejected' ? { error: promise.reason.message } : promise.value);
+  },
+
+  async validateUsers(users, appUrl) {
+    const { missingFieldsFailingIndexes, tokenLoginFailingIndexes, passwordFailingIndexes } = validateUserFields(users);
+    if (missingFieldsFailingIndexes.length > 0) {
+      const errorMessages = missingFieldsFailingIndexes.map(({ fields, index }) => {
+        return `Missing fields ${fields.join(', ')} for user at index ${index}`;
+      });
+      const errorMessage = ['Missing required fields:', ...errorMessages].join('\n');
+      return Promise.reject(error400(errorMessage, { failingIndexes: missingFieldsFailingIndexes }));
+    }
+
+    if (tokenLoginFailingIndexes.length > 0) {
+      const errorMessages = tokenLoginFailingIndexes.map(({ tokenLoginError, index }) => {
+        return `Error ${tokenLoginError.msg} for user at index ${index}`;
+      });
+      const errorMessage = ['Token login errors:', ...errorMessages].join('\n');
+      return Promise.reject(error400(errorMessage, { failingIndexes: tokenLoginFailingIndexes }));
+    }
+
+    if (passwordFailingIndexes.length > 0) {
+      const errorMessages = tokenLoginFailingIndexes.map(({ passwordError, index }) => {
+        return `Error ${passwordError.message.message} for user at index ${index}`;
+      });
+      const errorMessage = ['Password errors:', ...errorMessages].join('\n');
+      return Promise.reject(error400(errorMessage, { failingIndexes: passwordFailingIndexes }));
+    }
+
+    const promises = await allPromisesSettled(users.map(async (user) => await validateUserEntities(user, appUrl)));
     return promises.map((promise) => promise.status === 'rejected' ? { error: promise.reason.message } : promise.value);
   },
 

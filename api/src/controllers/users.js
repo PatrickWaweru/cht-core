@@ -208,7 +208,6 @@ module.exports = {
       .then(result => res.json(result))
       .catch(err => serverUtils.error(err, req, res));
   },
-
   info: (req, res) => {
     let userCtx;
     try {
@@ -223,6 +222,13 @@ module.exports = {
         warn: warn >= usersService.DOC_IDS_WARN_LIMIT,
         limit: usersService.DOC_IDS_WARN_LIMIT,
       }))
+      .catch(err => serverUtils.error(err, req, res));
+  },
+  validate: (req, res) => {
+    return auth
+      .check(req, 'can_create_users')
+      .then(() => usersService.validateUsers(req.body, getAppUrl(req)))
+      .then(body => res.json(body))
       .catch(err => serverUtils.error(err, req, res));
   },
 };
