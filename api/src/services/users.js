@@ -189,6 +189,21 @@ const createUser = (data, response) => {
   });
 };
 
+const validateNewContact = async (user) => {
+  if (!user.contact) {
+    return;
+  }
+
+  const contactId = getDocID(user.contact);
+  try {
+    await people._getPerson(contactId);
+  } catch (error) {
+    if (error.code !== 404) {
+      throw error;
+    }
+  }
+};
+
 const createContact = (data, response) => {
   if (!data.contact) {
     return;
@@ -211,6 +226,14 @@ const createUserSettings = (data, response) => {
       rev: body.rev
     };
   });
+};
+
+const validateNewPlace = async (user) => {
+  if (!user.place) {
+    return;
+  }
+
+  await places.getPlace(user.place);
 };
 
 const createPlace = data => {
@@ -244,6 +267,33 @@ const storeUpdatedPlace = (data, retry = 0) => {
       }
       throw err;
     });
+};
+
+const validateNewContactParent = async (user) => {
+  if (!user.contact) {
+    return;
+  }
+
+  const contactId = getDocID(user.contact);
+  if (contactId) {
+    // assigning to existing contact
+    const placeId = getDocID(user.place);
+    try {
+      return await validateContact(contactId, placeId);
+    } catch (error) {
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
+  }
+
+  if (user.contact.parent) {
+    // contact parent must exist
+    const place = await places.getPlace(user.contact.parent);
+    if (!hasParent(place, user.place)) {
+      throw error400('Contact is not within place.','configuration.user.place.contact');
+    }
+  }
 };
 
 const setContactParent = data => {
@@ -545,14 +595,12 @@ const createUserEntities = async (user, appUrl) => {
   return response;
 };
 
-const validateUserEntities = async (user, response) => {
+const validateUserEntities = async (user) => {
   await validateNewUsername(user.username);
-  // await validatePlace(user);
-  // await validateContactParent(user);
-  // await validateContact(user, response);
-  // await validateUser(user, response);
-  // await validateUserSettings(user, response);
-  // await validateTokenLogin(user, response);
+  await validateNewPlace(user);
+  await validateNewContactParent(user);
+  await validateNewContact(user);
+  await tokenLogin.validateTokenLogin(user);
 };
 
 const validateUserFields = (users) => {
@@ -706,6 +754,7 @@ module.exports = {
     }
 
     const promises = await allPromisesSettled(users.map(async (user) => await validateUserEntities(user, appUrl)));
+    console.log('promises', promises);
     return promises.map((promise) => promise.status === 'rejected' ? { error: promise.reason.message } : promise.value);
   },
 
