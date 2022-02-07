@@ -754,7 +754,6 @@ module.exports = {
     }
 
     const promises = await allPromisesSettled(users.map(async (user) => await validateUserEntities(user, appUrl)));
-    console.log('promises', promises);
     return promises.map((promise) => promise.status === 'rejected' ? { error: promise.reason.message } : promise.value);
   },
 
